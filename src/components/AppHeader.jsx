@@ -4,7 +4,13 @@ import { cn } from '../lib/cn.js'
 export function AppHeader({ world, running, className }) {
   const day = Math.floor(world.tick / SIMULATION_CONFIG.ticksPerDay) + 1
   const hour = world.tick % SIMULATION_CONFIG.ticksPerDay
-  const status = world.status === 'RUNNING' ? (running ? 'RUNNING' : 'PAUSED') : world.status
+  const status = world.status === 'RUNNING'
+    ? world.launch.status === 'IN_PROGRESS'
+      ? 'LAUNCHING'
+      : world.launch.status === 'READY'
+        ? 'READY TO LAUNCH'
+        : running ? 'RUNNING' : 'PAUSED'
+    : world.status
 
   return (
     <header className={cn('border-b border-neutral-950/10 bg-white', className)}>

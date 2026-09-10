@@ -2,7 +2,7 @@
 
 CoLLMony is a research simulation for studying long-horizon cooperation among multiple locally hosted LLM agents. The deterministic simulation owns the world and its consequences; agents choose high-level actions using their own observations, knowledge, persona, memory, and communication.
 
-The primary purpose is a reproducible research platform. Completing the Spaceport and launching the spacecraft is the standard episode task goal used to test cooperative performance, not the product's sole definition of success.
+The primary purpose is a reproducible research platform. Completing the Launchpad and Rocket, then launching the Rocket, is the standard episode task goal used to test cooperative performance, not the product's sole definition of success.
 
 ## Core concepts
 
@@ -47,7 +47,22 @@ The number of Ticks required for an action to complete. Standard resource gather
 Each completed GATHER produces exactly one unit of its resource type after the full Action Duration. Gathering does not produce partial units.
 
 **Resource Node**:
-An inexhaustible, fixed-position source of a resource. Every resource type has at least one Resource Node in the World. Gathering does not consume a finite deposit; it consumes the required Action Duration.
+An inexhaustible, fixed-position source of a gatherable resource. Every Survival Resource and Raw Resource has at least one Resource Node in the World. Gathering does not consume a finite deposit; it consumes the required Action Duration.
+
+**Survival Resource**:
+Food or Water consumed by daily Agent upkeep. It is gathered directly from a Resource Node.
+
+**Raw Resource**:
+A material gathered directly from a Resource Node and used in construction or a Production Recipe.
+
+**Processed Resource**:
+A material produced from Raw Resources through a Production Recipe after its required production building is complete.
+
+**Component**:
+A higher-order manufactured resource produced from Raw or Processed Resources and used in advanced buildings or the Rocket.
+
+**Production Recipe**:
+A configured transformation that consumes input resources and produces one output resource at a required production building.
 
 **Opportunity Cost**:
 The time and alternative progress lost when an Agent commits to, interrupts, or abandons an action.
@@ -65,10 +80,16 @@ The set of Agents simultaneously working on one building from its four adjacent 
 The next technology or recipe revealed to the Agents after the current technology or recipe is completed. The full dependency graph is not initially disclosed.
 
 **Tech Tier**:
-One of five ordered technology levels. Every building required by a Tier must be completed before the next Tier becomes available. The Tiers contain 1, 3, 5, 7, and 1 buildings respectively. Tier construction durations start at eight Ticks and double by Tier: 8, 16, 32, 64, and 128 Ticks. Tier 5 contains only the Spaceport/spacecraft construction target.
+One of five ordered technology levels. Every building required by a Tier must be completed before the next Tier becomes available. The Tiers contain 1, 3, 5, 7, and 2 buildings respectively. Tier construction durations start at eight Ticks and double by Tier: 8, 16, 32, 64, and 128 Ticks. Tier 5 contains the Launchpad and Rocket construction targets.
+
+**Launchpad**:
+The Tier 5 building from which the completed Rocket is launched. It is a separate construction target from the Rocket.
+
+**Rocket**:
+The Tier 5 vehicle assembled from advanced Components. It must be complete and fueled before Launch.
 
 **Launch**:
-The final one-Tick action performed after Spaceport completion. Launch is a distinct terminal action rather than an automatic consequence of construction.
+The final one-Tick action performed after both the Launchpad and Rocket are complete and 30 Rocket Fuel is available in the selected Storage. Launch consumes that fuel and is a distinct terminal action rather than an automatic consequence of construction.
 
 **Simulation Day**:
 A unit of simulated time containing exactly 24 ticks. Each tick represents one simulated hour.
@@ -122,13 +143,13 @@ Camp Storage remains available throughout an Episode. Technology progression may
 
 PROCESS consumes all inputs at start and places one configured output unit in the same Storage at completion. BUILD consumes or reserves all required inputs at start. A completed GATHER must finish before its one-unit output is added to Carried Cargo; partial work produces no resource. After completion, another GATHER must be explicitly selected rather than repeating automatically.
 
-The initial end-to-end scenario uses a small mostly linear chain from basic resources through processed resources and intermediate buildings to advanced technology and Spaceport. Branching recipes and alternative paths are later extensions.
+The initial end-to-end scenario uses a mostly linear chain from Survival and Raw Resources through Processed Resources and Components to the Launchpad and Rocket. Branching recipes and alternative paths are later extensions.
 
 Each Agent consumes one Food and one Water per Simulation Day. The initial Camp Storage contains 25 Food and 25 Water, representing five days of upkeep for five Agents. Failure to pay upkeep does not kill an Agent; it increases the duration multiplier for that Agent's subsequent actions according to the more negative of its Food and Water Need Deficits. The deficit accumulates without an upper bound while the corresponding upkeep remains unpaid. Once Warehouses exist, upkeep can consume Food and Water from the global total across all Storage locations. Each need recovers independently by one per successfully paid daily upkeep.
 
 Upkeep Storage selection uses ascending Storage ID order. If one need is present in multiple Storage locations, the resolver consumes from the lowest-ID Storage first.
 
-Spaceport is built using the normal Construction Crew rules after all build-time tech and resource preconditions are satisfied. Once complete, a separate one-Tick LAUNCH action checks Spaceport completion and launch fuel. Launch requires exactly 100 Coal in the relevant Storage; Coke cannot substitute for Coal. A valid launch succeeds immediately; an attempted launch without all conditions does not succeed, and the Episode continues until a later successful attempt or the 2,400-Tick limit. A successful launch ends the Episode.
+The Launchpad and Rocket are built as separate Tier 5 targets using the normal Construction Crew rules after all build-time technology and resource preconditions are satisfied. Once both are complete, a separate one-Tick LAUNCH action checks both targets and consumes 30 Rocket Fuel from the selected Storage. A valid launch succeeds after one Tick; an attempted launch without all conditions does not succeed, and the Episode continues until a later successful attempt or the 2,400-Tick limit. A successful launch ends the Episode.
 
 Multiple Agents may gather simultaneously from the same Resource Node. The node is inexhaustible, and each gathering action is an independent personal Work Commitment.
 
@@ -136,7 +157,7 @@ The initial experiment fixes the Agent population at five because local inferenc
 
 The initial decision interface provides one action intent per Agent per Tick. Long action queues are out of scope for the initial system because they increase context complexity; longer-term behavior is expressed through the current context, Memory, and Reflection.
 
-The exact duration table for PROCESS and BUILD must be reconstructed before implementation. The duration table is configuration, not an implicit model assumption. TALK and WAIT each consume one Tick. A completed action is the only point at which its resource reward is granted; abandoning work grants no partial reward.
+The baseline PROCESS and BUILD duration table is configuration, not an implicit model assumption. TALK and WAIT each consume one Tick. A completed action is the only point at which its resource reward is granted; abandoning work grants no partial reward.
 
 Construction may use up to four simultaneous Agents, one per orthogonally adjacent Work Position. Crew participation reduces the configured construction duration in proportion to the number of participating Agents; fractional Tick durations are rounded up, with a minimum of one Tick.
 

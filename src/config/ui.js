@@ -12,11 +12,22 @@ export const EVENT_LABELS = {
   SYSTEM: 'SYSTEM',
   GATHER: 'GATHER',
   DELIVER: 'DELIVER',
+  PROCESS: 'PROCESS',
   BUILD: 'BUILD',
+  STORAGE: 'STORAGE',
+  LAUNCH: 'LAUNCH',
+  INVALID: 'INVALID',
   TECH: 'TECH',
   UPKEEP: 'UPKEEP',
   COMPLETE: 'COMPLETE',
   TIME_LIMIT: 'LIMIT',
+}
+
+export const RESOURCE_GROUP_LABELS = {
+  survival: '생존 자원',
+  raw: '원자재',
+  processed: '가공재',
+  component: '부품',
 }
 
 export const PLAYBACK_TIMING = {

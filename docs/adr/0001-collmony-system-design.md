@@ -26,7 +26,17 @@ CoLLMony is a deterministic research simulation for studying long-horizon cooper
 
 **Communication** is an explicit private message exchanged between Agents. TALK selects one recipient, requires the sender and recipient to be within four cells at resolution, and makes a successful message visible in the recipient's next-Tick observation.
 
-**Resource Node** is a fixed-position, inexhaustible source. Every resource type has at least one Resource Node in the World. Quantity does not deplete; gathering consumes time.
+**Resource Node** is a fixed-position, inexhaustible source of a gatherable resource. Every Survival Resource and Raw Resource has at least one Resource Node in the World. Quantity does not deplete; gathering consumes time.
+
+**Survival Resource** is Food or Water consumed by daily Agent upkeep and gathered directly from a Resource Node.
+
+**Raw Resource** is gathered directly from a Resource Node and used in construction or a Production Recipe.
+
+**Processed Resource** is produced from Raw Resources through a Production Recipe after its required production building is complete.
+
+**Component** is a higher-order manufactured resource used in advanced buildings or the Rocket.
+
+**Production Recipe** is a configured transformation that consumes input resources and produces one output resource at a required production building.
 
 **Work Position** is one of the four orthogonally adjacent cells from which an Agent performs work on a Resource Node, building, or other target. Agents never stand on target tiles while working.
 
@@ -48,9 +58,13 @@ CoLLMony is a deterministic research simulation for studying long-horizon cooper
 
 **Tech Frontier** is the next technology or recipe revealed after the current technology or recipe is completed. The full dependency graph is not initially disclosed.
 
-**Tech Tier** is one of five ordered technology levels. The Tiers contain 1, 3, 5, 7, and 1 buildings respectively. Every building in the current Tier must be complete before the next Tier is revealed.
+**Tech Tier** is one of five ordered technology levels. The Tiers contain 1, 3, 5, 7, and 2 buildings respectively. Every building in the current Tier must be complete before the next Tier is revealed.
 
-**Launch** is the final one-Tick action performed after Spaceport completion. It is separate from Spaceport BUILD.
+**Launchpad** is the Tier 5 building from which the completed Rocket is launched and is a separate construction target from the Rocket.
+
+**Rocket** is the Tier 5 vehicle assembled from advanced Components. It must be complete and fueled before Launch.
+
+**Launch** is the final one-Tick action performed after both the Launchpad and Rocket are complete and 30 Rocket Fuel is available in the selected Storage. It consumes that fuel and is separate from their BUILD actions.
 
 ## Clock, decisions, and resolution
 
@@ -113,9 +127,9 @@ Food and Water deficits accumulate independently without an upper limit while un
 
 ## Tech progression and launch
 
-The Tech tree has five ordered Tiers with 1, 3, 5, 7, and 1 buildings. Every building required by the current Tier must be completed before the next Tier is revealed. Tier construction durations are 8, 16, 32, 64, and 128 Ticks before crew reduction. Tier 5 contains only the Spaceport/spacecraft construction target.
+The Tech tree has five ordered Tiers with 1, 3, 5, 7, and 2 buildings. Every building required by the current Tier must be completed before the next Tier is revealed. Tier construction durations are 8, 16, 32, 64, and 128 Ticks before crew reduction. Tier 5 contains the Launchpad and Rocket construction targets.
 
-Spaceport BUILD uses the normal Construction Crew rules and validates all required technology and construction resources at start. A completed Spaceport does not automatically launch. A separate one-Tick LAUNCH action checks Spaceport completion and launch fuel. Launch requires exactly 100 Coal in the relevant Storage; Coke cannot substitute for Coal. A valid attempt succeeds immediately and ends the Episode. An attempt without all conditions does not succeed, and the Episode continues until a later valid attempt or the 2,400-Tick limit.
+Launchpad and Rocket BUILD use the normal Construction Crew rules and validate all required technology and construction resources at start. Completing both targets does not automatically launch. A separate one-Tick LAUNCH action checks both targets and consumes 30 Rocket Fuel from the selected Storage. A valid attempt succeeds after one Tick and ends the Episode. An attempt without all conditions does not succeed, and the Episode continues until a later valid attempt or the 2,400-Tick limit.
 
 ## Communication, Memory, and Reflection
 
@@ -133,12 +147,12 @@ The raw event log records per-Tick observation hash, raw model output, parsed ac
 
 ## Research boundary and evaluation
 
-The primary purpose is a reproducible research platform. Spaceport Launch is the standard Episode task goal, not the only success measure. Outcomes include launch success, launch day, elapsed Ticks, resource and time efficiency, idle or repeated actions, communication activity and downstream effects, role differentiation, and variation across seeds.
+The primary purpose is a reproducible research platform. Rocket Launch is the standard Episode task goal, not the only success measure. Outcomes include launch success, launch day, elapsed Ticks, resource and time efficiency, idle or repeated actions, communication activity and downstream effects, role differentiation, and variation across seeds.
 
 Role differentiation is measured from Agent-level action distributions, resource contribution, and time allocation rather than Persona labels. Communication usefulness is not asserted by the engine; it is evaluated afterward by relating messages to subsequent information gain, action changes, and task outcomes.
 
-The first end-to-end scenario is a small mostly linear chain from basic resources through processed resources and intermediate buildings to advanced technology and Spaceport. The first experiment runs full-system smoke tests, then staged ablations, then a 2⁴ factorial over Persona, Memory, Reflection, and Communication. Development uses one to three seeds. Research comparisons target at least 20 fixed episodes per condition and report success rate, central tendency, and variance. The first Agent population remains five; population size and World variation are later experimental axes.
+The first end-to-end scenario is a mostly linear chain from Survival and Raw Resources through Processed Resources and Components to the Launchpad and Rocket. The first experiment runs full-system smoke tests, then staged ablations, then a 2⁴ factorial over Persona, Memory, Reflection, and Communication. Development uses one to three seeds. Research comparisons target at least 20 fixed episodes per condition and report success rate, central tendency, and variance. The first Agent population remains five; population size and World variation are later experimental axes.
 
-## Configuration still to be specified
+## Configuration baseline
 
-The architecture and domain rules above are fixed. The remaining configuration work is to name the 1/3/5/7/1 buildings, define recipes and Tech Frontier contents, finalize any recipe-specific PROCESS/BUILD durations, define the exact launch-fuel Storage reference, and publish the canonical 32×32 map before benchmark runs.
+The canonical 1/3/5/7/2 building roster, production recipes, Tech Frontier contents, action durations, launch requirement, and 32×32 map are versioned configuration. Benchmark-affecting changes require an explicit configuration version update.

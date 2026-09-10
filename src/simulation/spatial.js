@@ -12,7 +12,7 @@ export function footprintCells(entity) {
   }))
 }
 
-export function workPositions(entity) {
+export function workPositions(entity, blocked = new Set()) {
   const size = entity.size ?? { width: 1, height: 1 }
   const left = entity.position.x
   const top = entity.position.y
@@ -23,11 +23,11 @@ export function workPositions(entity) {
     { x: right + 1, y: top + Math.floor((size.height - 1) / 2) },
     { x: right - Math.floor((size.width - 1) / 2), y: bottom + 1 },
     { x: left - 1, y: bottom - Math.floor((size.height - 1) / 2) },
-  ].filter(inside)
+  ].filter((position) => inside(position) && !blocked.has(keyOf(position)))
 }
 
-export function nearestWorkPosition(agent, entity) {
-  return workPositions(entity).toSorted((a, b) => distance(agent.position, a) - distance(agent.position, b) || keyOf(a).localeCompare(keyOf(b)))[0]
+export function nearestWorkPosition(agent, entity, blocked = new Set()) {
+  return workPositions(entity, blocked).toSorted((a, b) => distance(agent.position, a) - distance(agent.position, b) || keyOf(a).localeCompare(keyOf(b)))[0]
 }
 
 export function blockedCells(world) {

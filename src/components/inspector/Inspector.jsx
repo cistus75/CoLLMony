@@ -23,10 +23,10 @@ export function Inspector({
         onPersonaMode={onPersonaMode}
         onReroll={onReroll}
       />
-      <StoragePanel storage={world.storage} />
+      <StoragePanel storages={world.storages} />
       <FrontierPanel
+        world={world}
         frontier={frontier}
-        storage={world.storage}
         completed={completedBuildings}
         total={world.buildings.length}
       />
