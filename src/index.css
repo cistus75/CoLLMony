@@ -1,0 +1,75 @@
+@import "tailwindcss";
+
+:root {
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-synthesis: none;
+}
+
+html {
+  background: var(--color-neutral-100);
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100%;
+}
+
+button,
+select {
+  cursor: pointer;
+}
+
+.world-map {
+  background-image:
+    linear-gradient(to right, color-mix(in srgb, var(--color-neutral-950) 10%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in srgb, var(--color-neutral-950) 10%, transparent) 1px, transparent 1px);
+  background-size: calc(100% / 32) calc(100% / 32);
+}
+
+.map-major-grid {
+  background-image:
+    linear-gradient(to right, color-mix(in srgb, var(--color-neutral-950) 24%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in srgb, var(--color-neutral-950) 24%, transparent) 1px, transparent 1px);
+  background-size: 12.5% 12.5%;
+  pointer-events: none;
+}
+
+.map-entity {
+  position: absolute;
+  left: calc(var(--entity-x) * 100% / 32);
+  top: calc(var(--entity-y) * 100% / 32);
+  width: calc(var(--entity-width) * 100% / 32);
+  height: calc(var(--entity-height) * 100% / 32);
+  box-sizing: border-box;
+}
+
+.agent-entity {
+  transition: left 100ms linear, top 100ms linear, opacity 100ms linear;
+}
+
+.map-axis {
+  position: absolute;
+  z-index: 5;
+  color: var(--color-neutral-400);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.5rem;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.map-axis-x {
+  top: 0.25rem;
+  left: calc(var(--axis-index) * 12.5% + 0.25rem);
+}
+
+.map-axis-y {
+  top: calc(var(--axis-index) * 12.5% + 0.25rem);
+  left: 0.25rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-entity {
+    transition: none;
+  }
+}

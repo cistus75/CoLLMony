@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#ffffff" />
+    <title>CoLLMony Simulation</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main>
+      <section class="simulation">
+        <div class="world-toolbar">
+          <div class="run-readout">
+            <strong>CoLLMony</strong>
+            <span class="live-pulse" id="livePulse"></span>
+            <span id="runState">HEURISTIC AGENTS</span>
+            <span id="worldTime">DAY 01 · 00:00</span>
+            <span id="tickCounter">TICK 0000 / 2400</span>
+          </div>
+          <div class="playback" role="group" aria-label="시뮬레이션 재생 제어">
+            <button type="button" id="viewButton">전체 시야</button>
+            <button class="speed-button" type="button" data-speed="0.5">0.5×</button>
+            <button class="speed-button active" type="button" data-speed="1">1×</button>
+            <button class="speed-button" type="button" data-speed="4">4×</button>
+            <button class="speed-button" type="button" data-speed="8">8×</button>
+            <button type="button" id="stepButton">+1 TICK</button>
+            <button type="button" id="playButton"><span id="playLabel">PAUSE</span></button>
+            <button type="button" id="resetButton">RESET</button>
+          </div>
+        </div>
+        <div class="map-header">
+          <strong>WORLD GRID 32 × 32</strong>
+          <span>X 0–31 / Y 0–31 / 1 CELL = 1 TILE</span>
+        </div>
+        <div class="map-wrap">
+          <div class="map" id="map" aria-label="32 곱하기 32 에이전트 시뮬레이션 지도">
+            <div class="map-grid" id="mapGrid" aria-hidden="true"></div>
+            <div class="camp map-object" data-x="16" data-y="16" style="--x:16;--y:16" aria-label="Camp"><span>CAMP</span></div>
+            <div id="nodeLayer"></div>
+            <div id="buildingLayer"></div>
+            <div class="agent agent-1" data-agent-id="1" style="--x:15;--y:15" aria-label="Agent A" role="button" tabindex="0"><span class="agent-label">A</span></div>
+            <div class="agent agent-2" data-agent-id="2" style="--x:16;--y:15" aria-label="Agent B" role="button" tabindex="0"><span class="agent-label">B</span></div>
+            <div class="agent agent-3" data-agent-id="3" style="--x:17;--y:15" aria-label="Agent C" role="button" tabindex="0"><span class="agent-label">C</span></div>
+            <div class="agent agent-4" data-agent-id="4" style="--x:15;--y:16" aria-label="Agent D" role="button" tabindex="0"><span class="agent-label">D</span></div>
+            <div class="agent agent-5" data-agent-id="5" style="--x:17;--y:16" aria-label="Agent E" role="button" tabindex="0"><span class="agent-label">E</span></div>
+          </div>
+        </div>
+        <div class="map-caption">
+          <span>선택: <b id="selectionReadout">A · (15, 15)</b></span>
+          <span>관찰 반경: 4칸</span>
+        </div>
+      </section>
+      <aside class="inspector">
+        <section>
+          <div class="section-heading"><strong>AGENTS</strong><span>A–E</span></div>
+          <div class="persona-controls">
+            <select id="personaModeSelect" aria-label="페르소나 생성 모드">
+              <option value="random">RANDOM</option><option value="neutral">NEUTRAL</option><option value="homogeneous">HOMOGENEOUS</option><option value="diverse">DIVERSE</option>
+            </select>
+            <button type="button" id="rerollPersona">SEED 1000 +</button>
+          </div>
+          <div class="agent-list" id="agentList"></div>
+          <div class="persona-detail">
+            <strong id="personaTitle">AGENT A · SEED 1000</strong>
+            <div class="trait-list" id="traitList"></div>
+            <p id="behaviorStats">아직 선택 기록이 없습니다.</p>
+          </div>
+        </section>
+        <section>
+          <div class="section-heading"><strong>STORAGE</strong><span class="storage-capacity">0 TOTAL</span></div>
+          <div class="resource-list" id="resourceList"></div>
+        </section>
+        <section>
+          <div class="section-heading"><strong>TECH FRONTIER</strong><span id="frontierLabel">LOADING</span></div>
+          <strong class="status-value" id="frontierName">작은 작업장</strong>
+          <p id="frontierCopy"></p><p id="buildingProgress"></p>
+          <div class="frontier-progress"><i id="frontierBar"></i></div>
+        </section>
+        <section>
+          <div class="section-heading"><strong>EVENT LOG</strong><span>LAST 3</span></div>
+          <div class="event-list" id="eventList" aria-live="polite"></div>
+        </section>
+      </aside>
+    </main>
+    <script src="./engine.js"></script><script src="./app.js"></script>
+  </body>
+</html>
