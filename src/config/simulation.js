@@ -1,5 +1,0 @@
-export * from './agents.js'
-export * from './buildings.js'
-export * from './experiment.js'
-export * from './resources.js'
-export * from './world.js'

@@ -7,10 +7,10 @@ The primary purpose is a reproducible research platform. Completing the Launchpa
 ## Core concepts
 
 **World**:
-The shared simulated environment in which resources, locations, buildings, technology, time, and launch progress exist.
+The fixed 32×32-cell simulated environment in which resources, locations, buildings, technology, time, and launch progress exist.
 
 **Camp**:
-The shared starting structure around which all Agents begin an Episode. Each Agent starts within one cell of the Camp, including diagonal cells. Initially it also functions as a shared warehouse: gathered resources must be brought to the Camp before other Agents can use them. As technology progresses, its special starting-location significance decreases while the resource-transfer boundary remains explicit.
+The shared starting structure fixed at the center of the World, around which all Agents begin an Episode. Each Agent starts within one cell of the Camp, including diagonal cells. Initially it also functions as a shared warehouse: gathered resources must be brought to the Camp before other Agents can use them.
 
 **Camp Storage**:
 The shared pool of resources deposited at the Camp and made available to other Agents and eligible World actions.
@@ -47,7 +47,13 @@ The number of Ticks required for an action to complete. Standard resource gather
 Each completed GATHER produces exactly one unit of its resource type after the full Action Duration. Gathering does not produce partial units.
 
 **Resource Node**:
-An inexhaustible, fixed-position source of a gatherable resource. Every Survival Resource and Raw Resource has at least one Resource Node in the World. Gathering does not consume a finite deposit; it consumes the required Action Duration.
+An inexhaustible source of a gatherable resource whose legal position is generated from the World Seed when an Episode begins and remains fixed for that Episode. Every Survival Resource and Raw Resource has one configured Resource Node type.
+
+**Building Blueprint**:
+Shared non-spatial knowledge describing a Building's identity, Tier, footprint size, construction inputs, and capability. A Blueprint has no World position.
+
+**Construction Site**:
+The fixed physical location created when the first valid BUILD intent places a revealed Building Blueprint. Its position is the top-left cell of the Building footprint, and the intent's selected Storage is fixed to the site. Neither can be changed by later BUILD intents.
 
 **Survival Resource**:
 Food or Water consumed by daily Agent upkeep. It is gathered directly from a Resource Node.
@@ -77,7 +83,7 @@ The orthogonally adjacent cell from which an Agent performs work on a Resource N
 The set of Agents simultaneously working on one building from its four adjacent cells. A building can have at most four crew members, and construction duration decreases as crew members join.
 
 **Tech Frontier**:
-The globally shared, non-spatial knowledge of the next technology or recipe revealed after the current one is completed. Its physical World details still follow Partial Observation, and the full dependency graph is not initially disclosed.
+The globally shared, non-spatial knowledge of currently revealed Building Blueprints, completed technology, and Production Recipes made available by completed buildings. Physical locations and building state still follow Partial Observation, and the full future dependency graph is not disclosed.
 
 **Tech Tier**:
 One of five ordered technology levels. Every building required by a Tier must be completed before the next Tier becomes available. The Tiers contain 1, 3, 5, 7, and 2 buildings respectively. Tier construction durations start at eight Ticks and double by Tier: 8, 16, 32, 64, and 128 Ticks. Tier 5 contains the Launchpad and Rocket construction targets.
@@ -95,13 +101,16 @@ The final one-Tick action performed after both the Launchpad and Rocket are comp
 A unit of simulated time containing exactly 24 ticks. Each tick represents one simulated hour.
 
 **Tick**:
-The atomic decision interval of the simulation, representing one simulated hour. Every Agent makes exactly one decision per Tick.
+The atomic World resolution interval representing one simulated hour. An Agent requests a new decision only when deterministic ongoing work does not already determine its next action.
 
 **Episode**:
 A single reproducible run of the World from one immutable Run Configuration until launch, failure, or the time limit.
 
 **Run Configuration**:
-The immutable experiment conditions captured when an Episode starts, including World Seed, Agent Seed, Agent Population, feature switches, and Observation Policy. Editing a draft configuration does not alter an active Episode.
+The immutable experiment conditions captured when an Episode starts, including Config Version, World Seed, Agent Seed, Agent Population, Persona Mode, feature switches, and Observation Policy. Editing a draft configuration does not alter an active Episode.
+
+**Config Version**:
+The integer identifying benchmark-affecting simulation rule and configuration changes. The initial version is `1`.
 
 **Run ID**:
 The unique identity attached to one Episode and its recorded Run Configuration.
@@ -113,10 +122,13 @@ The number of Agents participating in an Episode. The baseline is five and an ex
 The Run Configuration that selects full or partial World visibility, the partial-observation field radius, and whether observed Storage state carries an observation time.
 
 **World Seed**:
-The deterministic seed reserved for repeatable World scenario variation.
+The deterministic seed used only to generate Resource Node positions. It does not change World dimensions, Camp position, Building positions, or Agent Persona.
 
 **Agent Seed**:
-The deterministic seed for repeatable Agent-specific variation, including Persona generation.
+The deterministic seed for repeatable Agent-specific variation, including Persona generation under the selected Persona Mode. Rerolling Persona changes this seed.
+
+**Persona Mode**:
+The Run Configuration setting that selects the Persona generation strategy. It remains fixed for an active Episode.
 
 **Research Outcome**:
 A measurement of an Episode that includes launch success and time, efficiency, repeated or idle behavior, communication, role differentiation, and variation across seeds.
@@ -139,11 +151,11 @@ Communication is private to an explicitly selected recipient and is available on
 
 Messages are free-form and are not automatically verified as truthful by the World.
 
-Communication is a planned research capability; the current deterministic controller and resolver do not implement message exchange.
+Communication is a planned research capability; the current oracle smoke-test controller and deterministic resolver do not implement message exchange.
 
 ## Confirmed boundaries
 
-An Episode lasts at most 100 Simulation Days, or 2,400 Ticks. All Agents choose actions from the same Tick observation before the deterministic simulation resolves those actions. Exclusive claims use a World Seed-based deterministic tie-break while non-conflicting actions retain their normal order; Resource Nodes themselves are inexhaustible, so gathering does not compete for finite quantities. A multi-Tick Work Commitment continues until completion or explicit abandonment. Leaving its work location ends the commitment and records the lost time as Opportunity Cost. The World separates actual state from each Agent observation. Persona remains fixed during an Episode. Action legality is validated by the deterministic engine and invalid actions are not silently repaired.
+An Episode lasts at most 100 Simulation Days, or 2,400 Ticks. The World advances every Tick. Agents whose current controller flow requires a new decision receive observations from the same unresolved Tick before the deterministic simulation resolves submitted and automatic continuation actions. Deterministic ongoing work can continue without a new Controller or LLM inference. Exclusive claims use an Agent Seed-based deterministic tie-break while non-conflicting actions retain their normal order; Resource Nodes themselves are inexhaustible, so gathering does not compete for finite quantities. A multi-Tick Work Commitment continues until completion or explicit abandonment. Leaving its work location ends the commitment and records the lost time as Opportunity Cost. The World separates actual state from each Agent observation. Persona remains fixed during an Episode. Action legality is validated by the deterministic engine and invalid actions are not silently repaired.
 
 The initial World has no obstacle or line-of-sight system. Partial Observation uses the Run Configuration's Manhattan field radius; disabling it exposes the full World projection. The Communication setting is recorded but has no resolver behavior until message exchange is implemented.
 
@@ -155,7 +167,7 @@ Gathered resources are initially held as Carried Cargo by the gathering Agent an
 
 An Agent must deliver its current Carried Cargo before switching to a different resource type. There is no initial discard action.
 
-Camp Storage remains available throughout an Episode. Technology progression may unlock additional Warehouse locations, which can be placed more strategically, but each Warehouse maintains an independent resource pool with no automatic sharing with Camp or other Warehouses. Every Storage uses the same explicit one-Tick DELIVER rule from a Work Position. PROCESS and BUILD require their inputs to be present in the relevant Storage; carried resources cannot be consumed directly. A single PROCESS or BUILD action must source all required inputs from one Storage; resources in multiple Storage pools cannot be automatically combined. Once Warehouses exist, Food and Water upkeep may be paid from any Storage even though ordinary resource consumption remains local to the selected Storage.
+Camp Storage remains available throughout an Episode. Technology progression may unlock additional Warehouse locations, which can be placed more strategically, but each Warehouse maintains an independent resource pool with no automatic sharing with Camp or other Warehouses. Every Storage uses the same explicit one-Tick DELIVER rule from a Work Position. PROCESS and BUILD require their inputs to be present in the relevant Storage; carried resources cannot be consumed directly. The first BUILD for a site explicitly selects one existing Storage with all required inputs, and that selection remains fixed for the site. An invalid or understocked selection is rejected rather than replaced with another Storage. A single PROCESS or BUILD action must source all required inputs from one Storage; resources in multiple Storage pools cannot be automatically combined. Once Warehouses exist, Food and Water upkeep may be paid from any Storage even though ordinary resource consumption remains local to the selected Storage.
 
 PROCESS consumes all inputs at start and places one configured output unit in the same Storage at completion. BUILD consumes or reserves all required inputs at start. A completed GATHER must finish before its one-unit output is added to Carried Cargo; partial work produces no resource. After completion, another GATHER must be explicitly selected rather than repeating automatically.
 
@@ -169,12 +181,12 @@ The Launchpad and Rocket are built as separate Tier 5 targets using the normal C
 
 Multiple Agents may gather simultaneously from the same Resource Node. The node is inexhaustible, and each gathering action is an independent personal Work Commitment.
 
-The baseline Agent Population is five because local inference capacity is a practical constraint, while an Episode may run with one to five Agents. Every participating Agent starts within one cell of the Camp; diagonal cells are allowed. Deterministic decoding settings, World Seed, and Agent Seed are fixed for the reproducibility baseline, and the Run ID, Run Configuration, model, backend, prompt, and version metadata are logged.
+The baseline Agent Population is five because local inference capacity is a practical constraint, while an Episode may run with one to five Agents. Every participating Agent starts within one cell of the Camp; diagonal cells are allowed. World Seed and Agent Seed default to one, Config Version starts at one, and the Run ID and full Run Configuration are logged. Model, backend, prompt, and decoding metadata belong to the future local-LLM integration.
 
-The initial decision interface provides one action intent when an Agent needs a new decision. GATHER and PROCESS continue automatically while BUILD retains per-Tick crew participation. Leaving BUILD records an observable construction abandonment without preserving personal partial progress. Long action queues are out of scope for the initial system.
+The initial decision interface provides one action intent only when an Agent needs a new decision. GATHER and PROCESS commitments and active BUILD crew participation can continue through deterministic per-Tick actions without a fresh inference. When the controller flow requests a new choice, leaving BUILD records an observable construction abandonment without preserving personal partial progress. Long action queues are out of scope for the initial system.
 
 The baseline PROCESS and BUILD duration table is configuration, not an implicit model assumption. WAIT consumes one Tick. A completed action is the only point at which its resource reward is granted; abandoning work grants no partial reward.
 
 Construction may use up to four simultaneous Agents, one per orthogonally adjacent Work Position. Crew participation reduces the configured construction duration in proportion to the number of participating Agents; fractional Tick durations are rounded up, with a minimum of one Tick.
 
-After a technology or recipe is completed, the next Tech Frontier is revealed. The full technology dependency graph is not initially shown. Memory retrieval, Reflection generation, Communication, and model-output retry behavior remain future controller integrations.
+After the current Tier is completed, the next Tech Frontier is revealed. Agents globally know its Building Blueprints and know recipes enabled by completed production buildings, while physical observations remain subject to FOV. The full future technology dependency graph is not initially shown. Memory retrieval, Reflection generation, Communication, and model-output retry behavior remain future controller integrations.

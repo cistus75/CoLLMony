@@ -4,15 +4,15 @@ CoLLMony is a deterministic research simulation for studying long-horizon cooper
 
 ## Domain definitions
 
-**World** is the shared 32×32 simulated environment containing locations, Resource Nodes, buildings, technology, Storage, time, and launch progress.
+**World** is the shared 32×32 simulated environment containing locations, Resource Nodes, buildings, technology, Storage, time, and launch progress. Its dimensions are fixed and Camp occupies the central four cells.
 
 **Agent** is an individual decision-maker with its own Persona, Partial Observation, carried cargo, and needs. Knowledge, Memory, Reflection, and communication history are planned extensions.
 
-**Tick** is one simulated hour. Every Agent makes exactly one decision per Tick. A Simulation Day is 24 Ticks, and an Episode lasts at most 100 Simulation Days, or 2,400 Ticks.
+**Tick** is one simulated hour and one deterministic World resolution interval. A new Agent decision is requested only when ongoing deterministic work does not already determine the next action. A Simulation Day is 24 Ticks, and an Episode lasts at most 100 Simulation Days, or 2,400 Ticks.
 
 **Episode** is one reproducible World run from an immutable Run Configuration until successful Launch or the 2,400-Tick limit.
 
-**Run Configuration** is the immutable snapshot of World Seed, Agent Seed, Agent Population, feature switches, and Observation Policy captured when an Episode starts. Each Episode has a unique Run ID.
+**Run Configuration** is the immutable snapshot of Config Version, World Seed, Agent Seed, Agent Population, Persona Mode, feature switches, and Observation Policy captured when an Episode starts. Each Episode has a unique Run ID. Config Version starts at `1` and identifies benchmark-affecting rule and configuration changes.
 
 **Partial Observation** is the Agent-specific projection of the World available at a decision point. It is not the raw global World state.
 
@@ -28,7 +28,11 @@ CoLLMony is a deterministic research simulation for studying long-horizon cooper
 
 **Communication** is the planned exchange of explicit private messages between Agents. The current deterministic resolver does not implement TALK or message delivery.
 
-**Resource Node** is a fixed-position, inexhaustible source of a gatherable resource. Every Survival Resource and Raw Resource has at least one Resource Node in the World. Quantity does not deplete; gathering consumes time.
+**Resource Node** is an inexhaustible source of a gatherable resource. Resource types and counts are configured, while each Episode generates legal positions deterministically from World Seed and then keeps those positions fixed.
+
+**Building Blueprint** is shared non-spatial technology knowledge containing identity, Tier, footprint size, construction inputs, and capability without a map position.
+
+**Construction Site** is the physical footprint fixed by the first legal BUILD placement intent for a revealed Building Blueprint. The same intent selects an existing Storage with all required resources, and that Storage remains fixed for the site.
 
 **Survival Resource** is Food or Water consumed by daily Agent upkeep and gathered directly from a Resource Node.
 
@@ -58,7 +62,7 @@ CoLLMony is a deterministic research simulation for studying long-horizon cooper
 
 **Need Deficit** is a negative Food or Water value caused by unpaid upkeep. The more negative of the two deficits determines the Agent's duration multiplier.
 
-**Tech Frontier** is the next technology or recipe revealed after the current technology or recipe is completed. The full dependency graph is not initially disclosed.
+**Tech Frontier** is globally shared non-spatial knowledge containing currently revealed Building Blueprints, completed technology, and Production Recipes enabled by completed buildings. The full future dependency graph is not initially disclosed.
 
 **Tech Tier** is one of five ordered technology levels. The Tiers contain 1, 3, 5, 7, and 2 buildings respectively. Every building in the current Tier must be complete before the next Tier is revealed.
 
@@ -70,7 +74,7 @@ CoLLMony is a deterministic research simulation for studying long-horizon cooper
 
 ## Clock, decisions, and resolution
 
-All Agents receive their same-Tick observations before any action result is resolved and each chooses exactly once. The deterministic resolver then handles legality, action duration, resource effects, movement, construction, and conflicts. Agents do not receive same-Tick feedback before the next decision.
+The World advances every Tick. Agents whose current controller flow requires a new decision receive their same-Tick observations before any action result is resolved. The deterministic resolver can continue ongoing work without a new Controller or LLM inference and handles legality, action duration, resource effects, movement, construction, and conflicts. Agents do not receive same-Tick feedback before the next decision point.
 
 The initial action durations are:
 
@@ -88,13 +92,15 @@ Movement is cardinal only; diagonal movement is not allowed. The initial World h
 
 Agents do not block one another's movement and may occupy the same grid cell. Static World entities remain blocking.
 
-For a personal Work Commitment, the Agent explicitly chooses CONTINUE or ABANDON while work is in progress. Leaving the Work Position also ends the commitment. Abandoned GATHER or PROCESS work yields no partial resource reward.
+After a personal GATHER or PROCESS Work Commitment starts, the deterministic controller flow can continue it without a fresh decision. An explicit ABANDON action ends it, as does leaving the Work Position. Abandoned work yields no partial resource reward.
 
-BUILD requires a BUILD intent for every participation Tick. Changing intent or leaving the assigned Work Position ends that Agent's participation and records a construction abandonment, while shared building progress remains. Construction Crew membership may therefore change each Tick without a separate personal construction commitment object.
+Active BUILD participation is represented by a BUILD action on every participation Tick, but the deterministic controller flow can supply continuation actions without a fresh inference. When a new controller decision is requested, changing intent or leaving the assigned Work Position ends that Agent's participation and records a construction abandonment, while shared building progress remains. Construction Crew membership may therefore change without a separate personal construction commitment object.
+
+The first BUILD intent for an unplaced Building includes the desired top-left footprint coordinate and an explicit Storage ID. The World validates that the Storage exists, holds all required inputs, and that normal placement rules pass. It rejects an invalid selection without substituting a nearer Storage. A valid position and Storage become fixed, and later participants may submit only the Building identity. Unplaced Buildings have no footprint, do not block movement, and are absent from physical observations while remaining available as revealed Tech Frontier knowledge.
 
 Construction crew reduction is calculated first as `ceil(base_duration / crew_size)`, with a minimum of one Tick. Crew can join or leave during construction; remaining work is resolved from the current crew. Multi-Agent duration reduction applies to BUILD only. GATHER and PROCESS remain individual work.
 
-Exclusive claims use a World Seed-based deterministic tie-break rather than permanently privileging a fixed Agent ID. Non-conflicting actions retain their normal order. Resource gathering itself has no finite-resource contention because Resource Nodes are inexhaustible.
+Exclusive claims use an Agent Seed-based deterministic tie-break rather than permanently privileging a fixed Agent ID. Non-conflicting actions retain their normal order. Resource gathering itself has no finite-resource contention because Resource Nodes are inexhaustible.
 
 ## Observation and information boundaries
 
@@ -102,7 +108,7 @@ Partial Observation uses the Run Configuration's Manhattan field radius. Disabli
 
 The full map, global resource quantities, full Tech tree, remote Storage quantities, and other Agents' private state are not initially disclosed. Persistent remote facts and stale Knowledge require the future Knowledge or Communication integration.
 
-The initial common knowledge includes the action schema, basic movement rules, the Agent's own state, and the local observation. After a technology or recipe is completed, the next Tech Frontier's non-spatial knowledge is revealed to all Agents independently of FOV, while its physical details still follow Partial Observation and the complete dependency graph remains hidden.
+The initial common knowledge includes the action schema, basic movement rules, the Agent's own state, and the local observation. Currently revealed Building Blueprints include their size and required resources. Completed technology and recipes enabled by completed production buildings are shared independently of FOV, while physical locations and physical building state still follow Partial Observation and the complete future dependency graph remains hidden.
 
 ## Spatial work and resources
 
@@ -118,7 +124,7 @@ Camp begins as the shared starting Storage and remains available throughout the 
 
 Resource Delivery is an explicit one-Tick DELIVER action from one of a Storage's four cardinally adjacent Work Positions. Reaching the Work Position alone does not transfer Carried Cargo. There is no separate DEPOSIT action, and the same delivery rule applies to Camp and every Warehouse.
 
-PROCESS consumes all inputs at start from one selected Storage and places its output in that same Storage at completion. BUILD consumes or reserves all required inputs at start from one selected Storage. Carried resources cannot be consumed directly. A single PROCESS or BUILD action cannot combine inputs from multiple Storage pools.
+PROCESS consumes all inputs at start from one selected Storage and places its output in that same Storage at completion. The first BUILD explicitly selects one existing Storage that already contains all required inputs; the site keeps that Storage for all later construction participation. Carried resources cannot be consumed directly. A single PROCESS or BUILD action cannot combine inputs from multiple Storage pools.
 
 Food and Water upkeep is the exception to independent ordinary Storage pools. Once Warehouses exist, upkeep can use the global total across all Storage locations. When a need is present in multiple Storage locations, the resolver consumes from the lowest Storage ID first.
 
@@ -138,13 +144,13 @@ Launchpad and Rocket BUILD use the normal Construction Crew rules and validate a
 
 ## Communication, Memory, and Reflection
 
-Communication, Memory, and Reflection currently exist only as recorded experiment settings exposed at the observation boundary. The deterministic controller and resolver do not exchange messages, retrieve episodic Memory, or generate Reflection summaries.
+Communication, Memory, and Reflection currently exist only as recorded experiment settings exposed at the observation boundary. The oracle smoke-test controller and deterministic resolver do not exchange messages, retrieve episodic Memory, or generate Reflection summaries.
 
 ## Reproducibility and failure handling
 
-The baseline Agent Population is five because local inference capacity is a practical constraint, and experiments may select between one and five Agents. World Seed and Agent Seed independently control repeatable World and Agent variation. The Run ID, Run Configuration, deterministic decoding settings, model, backend, prompt, and version metadata are recorded.
+The baseline Agent Population is five because local inference capacity is a practical constraint, and experiments may select between one and five Agents. World Seed controls only repeatable Resource Node placement. Agent Seed independently controls Persona generation under the Run Configuration's Persona Mode and future Agent-specific randomness; rerolling Persona changes Agent Seed. The Run ID, Config Version, and full Run Configuration are recorded, while model, backend, prompt, and decoding metadata belong to the future local-LLM integration.
 
-The current deterministic controller produces in-process intents and has no model-output retry path. Retry, timeout, and malformed model-output handling belong to the future local-LLM controller adapter.
+The default `oracle-smoke-controller` may inspect full World state to drive deterministic smoke tests. It is a debug fixture, not a partial-observation research baseline. Future LLM and research controllers must decide from Agent observations and respect the observation boundary. The current oracle controller produces in-process intents and has no model-output retry path; retry, timeout, and malformed model-output handling belong to the future local-LLM controller adapter.
 
 The Episode Recorder currently records the Run Configuration, decision observations, controller identity, submitted intents, resolved actions, status transitions, and outcome outside React World state. Raw model output, latency, token usage, Memory, Reflection, and message metadata remain future optional fields.
 
