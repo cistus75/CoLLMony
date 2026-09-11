@@ -32,6 +32,7 @@ function BuildingProgress({ building, storage }) {
   const progress = building.status === 'UNDER_CONSTRUCTION'
     ? 1 - (building.workRemaining / building.duration)
     : inputProgress
+  const remainingWork = Math.ceil(building.workRemaining * 100) / 100
 
   return (
     <article className="grid gap-3 px-4 py-4">
@@ -41,7 +42,7 @@ function BuildingProgress({ building, storage }) {
           <p className="text-sm text-neutral-500">Tier {building.tier} · {building.size.width} × {building.size.height} cells · {storage.name}</p>
         </div>
         <p className="shrink-0 text-sm tabular-nums font-medium text-neutral-700">
-          {building.status === 'UNDER_CONSTRUCTION' ? `${building.workRemaining} WORK` : 'REVEALED'}
+          {building.status === 'UNDER_CONSTRUCTION' ? `${remainingWork} WORK` : 'REVEALED'}
         </p>
       </div>
       <ResourceProgress inputs={building.inputs} resources={storage.resources} />

@@ -4,6 +4,7 @@ import {
   BUILDING_BLUEPRINTS,
   CAMP_CONFIG,
   createExperimentConfig,
+  createRunMetadata,
   DEFAULT_EXPERIMENT_CONFIG,
   FEATURE_CONFIG,
   PROCESS_RECIPES,
@@ -12,13 +13,8 @@ import {
   STORAGE_CONFIG,
   UPKEEP_CONFIG,
 } from '../config/simulation.js'
+import { seededValue } from './determinism.js'
 import { validateSimulationConfig } from './validateConfig.js'
-
-function seededValue(seed, ...parts) {
-  let value = seed >>> 0
-  for (const part of parts.join(':')) value = Math.imul(value ^ part.charCodeAt(0), 2654435761) >>> 0
-  return value
-}
 
 function makeTraits(seed, index, mode) {
   if (mode === 'neutral') return Object.fromEntries(AGENT_CONFIG.traits.map((trait) => [trait, 5]))
@@ -42,12 +38,11 @@ export function createWorld({
 } = {}) {
   validateSimulationConfig()
   const runConfig = createExperimentConfig(experimentConfig)
-  const seed = runConfig.experiment.seed
-  const runId = globalThis.crypto.randomUUID()
+  const runId = globalThis.crypto?.randomUUID?.() ?? `run-${Date.now().toString(36)}`
 
   return {
-    worldSeed: seed,
-    agentSeed: seed,
+    worldSeed: runConfig.experiment.worldSeed,
+    agentSeed: runConfig.experiment.agentSeed,
     personaMode,
     run: { id: runId, config: runConfig },
     tick: 0,
@@ -73,26 +68,22 @@ export function createWorld({
       action: { type: 'WAIT', detail: '다음 결정을 기다리는 중' },
       cargo: { type: null, amount: 0, storageId: null },
       needs: Object.fromEntries(Object.keys(UPKEEP_CONFIG.perAgent).map((resource) => [resource.toLowerCase(), 0])),
-      persona: makeTraits(seed, index, personaMode),
+      persona: makeTraits(runConfig.experiment.agentSeed, index, personaMode),
       gather: null,
       process: null,
-      pendingDelivery: false,
-      stats: { moves: 0, gathered: 0, delivered: 0, built: 0 },
+      buildTargetId: null,
+      nextDecisionTick: 0,
+      stats: { moves: 0, gathered: 0, delivered: 0, built: 0, buildTicks: 0, buildAbandons: 0 },
     })),
     recipes: structuredClone(PROCESS_RECIPES),
-    features: {
-      ...structuredClone(FEATURE_CONFIG),
-      memory: runConfig.memory.enabled,
-      communication: runConfig.communication.enabled,
-      reflection: runConfig.reflection.enabled,
-    },
+    features: structuredClone(FEATURE_CONFIG),
     launch: { status: 'LOCKED', actorId: null, storageId: null, remaining: 0 },
     log: [{
       id: 'start-0',
       tick: 0,
       type: 'SYSTEM',
       message: 'Episode가 시작되었습니다.',
-      data: { runId, config: structuredClone(runConfig) },
+      data: createRunMetadata(runId, runConfig),
     }],
     nextEventId: 1,
   }

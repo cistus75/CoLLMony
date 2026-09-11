@@ -3,6 +3,7 @@ import {
   AGENT_CONFIG,
   BUILDING_BLUEPRINTS,
   CAMP_CONFIG,
+  EXPERIMENT_LIMITS,
   LAUNCH_CONFIG,
   PROCESS_RECIPES,
   RESOURCE_CONFIG,
@@ -39,6 +40,8 @@ export function validateSimulationConfig() {
   assertUnique(PROCESS_RECIPES, '생산법')
   assertConfig(new Set(resourceCodes).size === resourceCodes.length, '자원 코드가 중복되었습니다.')
   assertConfig(new Set(PROCESS_RECIPES.map((recipe) => recipe.output.resource)).size === PROCESS_RECIPES.length, '한 자원에 여러 생산법을 지정할 수 없습니다.')
+  assertConfig(EXPERIMENT_LIMITS.agentCount.max <= AGENT_CONFIG.names.length, '최대 Agent 수보다 이름 설정이 적습니다.')
+  assertConfig(EXPERIMENT_LIMITS.agentCount.max <= AGENT_CONFIG.startPositions.length, '최대 Agent 수보다 시작 위치 설정이 적습니다.')
 
   RESOURCE_NODES.forEach((node) => {
     assertConfig(resourceIds.has(node.resource), `${node.id} 노드의 자원 ${node.resource}가 없습니다.`)

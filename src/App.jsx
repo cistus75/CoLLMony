@@ -8,6 +8,7 @@ import { useSimulation } from './hooks/useSimulation.js'
 export default function App() {
   const simulation = useSimulation()
   const selectedPosition = simulation.displayedPositions[simulation.selectedAgentId]
+  const observationConfig = simulation.world.run.config.observation
 
   return (
     <div className="isolate min-h-dvh bg-neutral-100 text-neutral-950 antialiased">
@@ -47,7 +48,7 @@ export default function App() {
             <p>
               선택: <span className="tabular-nums font-medium text-neutral-950">Agent {simulation.selectedAgent.name} · ({selectedPosition.x}, {selectedPosition.y}) · {simulation.selectedAgent.action.type}</span>
             </p>
-            <p>관찰 반경 {SIMULATION_CONFIG.observationRange}칸 · 건물 좌표는 좌상단 셀 기준</p>
+            <p>{observationConfig.partialObservation ? `관찰 반경 ${observationConfig.fovRadius}칸` : '전체 지도 관찰'} · 건물 좌표는 좌상단 셀 기준</p>
           </div>
         </section>
 
@@ -59,6 +60,10 @@ export default function App() {
           onSelectAgent={simulation.selectAgent}
           onPersonaMode={simulation.setPersonaMode}
           onReroll={simulation.rerollPersona}
+          experimentConfig={simulation.experimentConfig}
+          experimentDirty={simulation.experimentDirty}
+          onExperimentChange={simulation.updateExperimentSetting}
+          onExperimentStart={simulation.startExperiment}
         />
       </main>
     </div>

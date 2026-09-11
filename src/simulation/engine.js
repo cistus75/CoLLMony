@@ -1,10 +1,24 @@
-import { ACTION_CONFIG, LAUNCH_CONFIG, RESOURCE_CONFIG, SIMULATION_CONFIG, UPKEEP_CONFIG } from '../config/simulation.js'
-import { selectDefaultActions } from './defaultPolicy.js'
+import { ACTION_CONFIG, createExperimentConfig, LAUNCH_CONFIG, RESOURCE_CONFIG, SIMULATION_CONFIG, UPKEEP_CONFIG } from '../config/simulation.js'
+import { defaultController } from './defaultController.js'
+import { seededValue } from './determinism.js'
+import { createObservations } from './observation.js'
 import { blockedCells, createMovePath, distance, keyOf, nearestWorkPosition, workPositions } from './spatial.js'
 
 export { createWorld } from './worldFactory.js'
 export { createAgentObservation, createObservations } from './observation.js'
 export { createMovePath, distance, footprintCells, workPositions } from './spatial.js'
+
+export function actionDurationMultiplier(agent) {
+  return 1 + Math.max(0, -(Math.min(agent.needs.food, agent.needs.water)))
+}
+
+export function actionDuration(agent, baseDuration) {
+  return baseDuration * actionDurationMultiplier(agent)
+}
+
+function delayNextDecision(world, agent, baseDuration = 1) {
+  agent.nextDecisionTick = world.tick + actionDuration(agent, baseDuration)
+}
 
 function addEvent(world, type, message) {
   world.log.push({ id: `${world.tick}-${world.nextEventId}`, tick: world.tick, type, message })
@@ -42,10 +56,11 @@ function moveToward(world, agent, target) {
   agent.position = { ...path.at(-1) }
   agent.stats.moves += path.length
   agent.action = { type: 'MOVE', detail: `${path.length}칸 이동` }
+  delayNextDecision(world, agent, ACTION_CONFIG.MOVE)
 }
 
 function startGather(agent, node, storageId) {
-  agent.gather = { resource: node.resource, storageId, remaining: RESOURCE_CONFIG[node.resource].gatherDuration }
+  agent.gather = { resource: node.resource, storageId, remaining: actionDuration(agent, RESOURCE_CONFIG[node.resource].gatherDuration) - 1 }
   agent.action = { type: 'GATHER', detail: `${RESOURCE_CONFIG[node.resource].label} 채집 준비` }
 }
 
@@ -62,23 +77,18 @@ function continueGather(world, agent) {
 }
 
 function deliver(world, agent, storage) {
-  if (!agent.pendingDelivery) {
-    agent.pendingDelivery = true
-    agent.action = { type: 'DELIVER', detail: `${storage.name} 인계를 기다리는 중` }
-    return
-  }
   const { type, amount } = agent.cargo
   storage.resources[type] += amount
   agent.cargo = { type: null, amount: 0, storageId: null }
-  agent.pendingDelivery = false
   agent.stats.delivered += amount
   agent.action = { type: 'DELIVER', detail: `${RESOURCE_CONFIG[type].label} ${amount}개 전달 완료` }
-  addEvent(world, 'DELIVER', `Agent ${agent.name}가 ${RESOURCE_CONFIG[type].label} ${amount}개를 ${storage.name}에 전달했습니다.`)
+  delayNextDecision(world, agent)
+  addEvent(world, 'DELIVER', `Agent ${agent.name}가 DELIVER로 ${RESOURCE_CONFIG[type].label} ${amount}개를 ${storage.name}에 전달했습니다.`)
 }
 
 function startProcess(world, agent, recipe, storage) {
   Object.entries(recipe.inputs).forEach(([resource, amount]) => { storage.resources[resource] -= amount })
-  agent.process = { recipeId: recipe.id, storageId: storage.id, remaining: ACTION_CONFIG.PROCESS, output: structuredClone(recipe.output) }
+  agent.process = { recipeId: recipe.id, storageId: storage.id, remaining: actionDuration(agent, ACTION_CONFIG.PROCESS) - 1, output: structuredClone(recipe.output) }
   agent.action = { type: 'PROCESS', detail: `${recipe.name} 준비` }
 }
 
@@ -126,9 +136,17 @@ function revealNextTier(world) {
 function startLaunch(world, agent, building, storage) {
   const { resource, amount } = LAUNCH_CONFIG.fuel
   storage.resources[resource] -= amount
-  world.launch = { status: 'IN_PROGRESS', actorId: agent.id, storageId: storage.id, remaining: ACTION_CONFIG.LAUNCH }
+  world.launch = { status: 'IN_PROGRESS', actorId: agent.id, storageId: storage.id, remaining: actionDuration(agent, ACTION_CONFIG.LAUNCH) - 1 }
   agent.action = { type: 'LAUNCH', detail: `${building.name} 발사 절차 진행 중` }
   addEvent(world, 'LAUNCH', `Agent ${agent.name}가 로켓 발사 절차를 시작했습니다.`)
+  if (world.launch.remaining === 0) completeLaunch(world, agent)
+}
+
+function completeLaunch(world, actor) {
+  world.launch.status = 'COMPLETE'
+  world.status = 'SUCCESS'
+  actor.action = { type: 'LAUNCH', detail: '로켓 발사 성공' }
+  addEvent(world, 'LAUNCH', '로켓이 성공적으로 발사되었습니다. Episode가 완료되었습니다.')
 }
 
 function continueLaunch(world) {
@@ -140,10 +158,7 @@ function continueLaunch(world) {
     agent.action = { type: 'WAIT', detail: '발사 절차를 지켜보는 중' }
   })
   if (world.launch.remaining > 0) return true
-  world.launch.status = 'COMPLETE'
-  world.status = 'SUCCESS'
-  actor.action = { type: 'LAUNCH', detail: '로켓 발사 성공' }
-  addEvent(world, 'LAUNCH', '로켓이 성공적으로 발사되었습니다. Episode가 완료되었습니다.')
+  completeLaunch(world, actor)
   return true
 }
 
@@ -181,13 +196,82 @@ function rejectAction(world, agent, detail) {
 function abandonCommitment(agent) {
   agent.gather = null
   agent.process = null
-  agent.pendingDelivery = false
   agent.action = { type: 'WAIT', detail: '진행 중인 작업을 중단함' }
+}
+
+function endBuildParticipation(world, agent) {
+  if (!agent.buildTargetId) return
+  const building = world.buildings.find((item) => item.id === agent.buildTargetId)
+  agent.stats.buildAbandons += 1
+  agent.buildTargetId = null
+  addEvent(world, 'BUILD_ABANDON', `Agent ${agent.name}가 ${building?.name ?? '건물'} 건설 참여를 중단했습니다.`)
+}
+
+function agentsInConflict(world, actionByAgent) {
+  const conflicted = new Set()
+  const buildGroups = new Map()
+  const resourceGroups = new Map()
+  const requestedBuildings = new Set()
+  const launchAgents = []
+
+  world.agents.forEach((agent) => {
+    const intent = actionByAgent.get(agent.id)
+    if (intent?.type === 'BUILD') {
+      const building = world.buildings.find((item) => item.id === intent.buildingId)
+      if (!building) return
+      const group = buildGroups.get(building.id) ?? []
+      group.push(agent.id)
+      buildGroups.set(building.id, group)
+      if (building.status === 'REVEALED' && !requestedBuildings.has(building.id)) {
+        requestedBuildings.add(building.id)
+        const requests = resourceGroups.get(building.storageId) ?? []
+        requests.push({ agentId: agent.id, inputs: building.inputs })
+        resourceGroups.set(building.storageId, requests)
+      }
+    }
+    if (intent?.type === 'PROCESS') {
+      const recipe = world.recipes.find((item) => item.id === intent.recipeId)
+      if (!recipe) return
+      const requests = resourceGroups.get(intent.storageId) ?? []
+      requests.push({ agentId: agent.id, inputs: recipe.inputs })
+      resourceGroups.set(intent.storageId, requests)
+    }
+    if (intent?.type === 'LAUNCH') launchAgents.push(agent.id)
+  })
+
+  buildGroups.forEach((agentIds, buildingId) => {
+    const building = world.buildings.find((item) => item.id === buildingId)
+    if (agentIds.length > workPositions(building, blockedCells(world)).length) agentIds.forEach((agentId) => conflicted.add(agentId))
+  })
+
+  resourceGroups.forEach((requests, storageId) => {
+    const storage = storageById(world, storageId)
+    if (!storage) return
+    const totals = requests.reduce((result, request) => {
+      Object.entries(request.inputs).forEach(([resource, amount]) => { result[resource] = (result[resource] ?? 0) + amount })
+      return result
+    }, {})
+    const scarce = new Set(Object.entries(totals).filter(([resource, amount]) => storage.resources[resource] < amount).map(([resource]) => resource))
+    requests.filter((request) => Object.keys(request.inputs).some((resource) => scarce.has(resource))).forEach((request) => conflicted.add(request.agentId))
+  })
+
+  if (world.launch.status === 'READY' && launchAgents.length > 1) launchAgents.forEach((agentId) => conflicted.add(agentId))
+  return conflicted
+}
+
+function resolutionOrder(world, actionByAgent) {
+  const conflicted = agentsInConflict(world, actionByAgent)
+  const ranked = world.agents
+    .filter((agent) => conflicted.has(agent.id))
+    .toSorted((a, b) => seededValue(world.worldSeed, world.tick, a.id) - seededValue(world.worldSeed, world.tick, b.id))
+  let cursor = 0
+  return world.agents.map((agent) => conflicted.has(agent.id) ? ranked[cursor++] : agent)
 }
 
 export function resolveTick(currentWorld, actions = []) {
   if (currentWorld.status !== 'RUNNING') return currentWorld
   const world = structuredClone(currentWorld)
+  world.run.config = createExperimentConfig(currentWorld.run.config)
   world.tick += 1
   world.agents.forEach((agent) => { agent.movePath = [] })
 
@@ -198,8 +282,13 @@ export function resolveTick(currentWorld, actions = []) {
   const crews = new Map()
   const claimedWorkPositions = new Map()
 
-  for (const agent of world.agents) {
+  for (const agent of resolutionOrder(world, actionByAgent)) {
     const intent = actionByAgent.get(agent.id) ?? { type: 'WAIT' }
+    if (agent.buildTargetId && (intent.type !== 'BUILD' || intent.buildingId !== agent.buildTargetId)) endBuildParticipation(world, agent)
+    if (agent.nextDecisionTick > world.tick) {
+      agent.action = { type: 'WAIT', detail: `행동 회복 중 · ${agent.nextDecisionTick - world.tick}틱` }
+      continue
+    }
     if (agent.process) {
       if (intent.type === 'CONTINUE') continueProcess(world, agent)
       else if (intent.type === 'ABANDON') abandonCommitment(agent)
@@ -221,7 +310,6 @@ export function resolveTick(currentWorld, actions = []) {
           continue
         }
         agent.cargo.storageId = storage.id
-        agent.pendingDelivery = false
         const target = nearestWorkPosition(agent, node, blockedCells(world))
         if (keyOf(agent.position) === keyOf(target)) startGather(agent, node, storage.id)
         else moveToward(world, agent, target)
@@ -236,10 +324,7 @@ export function resolveTick(currentWorld, actions = []) {
         agent.cargo.storageId = storage.id
         const target = nearestWorkPosition(agent, storage, blockedCells(world))
         if (keyOf(agent.position) === keyOf(target)) deliver(world, agent, storage)
-        else {
-          agent.pendingDelivery = false
-          moveToward(world, agent, target)
-        }
+        else moveToward(world, agent, target)
         continue
       }
       rejectAction(world, agent, '화물을 먼저 채집하거나 저장소에 전달해야 합니다.')
@@ -274,10 +359,13 @@ export function resolveTick(currentWorld, actions = []) {
           addEvent(world, 'BUILD', `${building.name} 건설이 시작되었습니다.`)
         }
         agent.action = { type: 'BUILD', detail: `${building.name} 건설 중` }
+        agent.buildTargetId = building.id
+        agent.stats.buildTicks += 1
         const crew = crews.get(building.id) ?? []
         crew.push(agent)
         crews.set(building.id, crew)
       } else {
+        endBuildParticipation(world, agent)
         moveToward(world, agent, target)
       }
       continue
@@ -337,11 +425,13 @@ export function resolveTick(currentWorld, actions = []) {
 
     if (intent.type === 'ABANDON') {
       abandonCommitment(agent)
+      delayNextDecision(world, agent, ACTION_CONFIG.WAIT)
       continue
     }
 
     if (intent.type === 'WAIT') {
       agent.action = { type: 'WAIT', detail: '다음 결정을 기다리는 중' }
+      delayNextDecision(world, agent, ACTION_CONFIG.WAIT)
       continue
     }
 
@@ -350,10 +440,14 @@ export function resolveTick(currentWorld, actions = []) {
 
   crews.forEach((crew, buildingId) => {
     const building = world.buildings.find((item) => item.id === buildingId)
-    building.workRemaining = Math.max(0, building.workRemaining - crew.length)
+    const contribution = crew.reduce((total, agent) => total + (1 / actionDurationMultiplier(agent)), 0)
+    building.workRemaining = Math.max(0, building.workRemaining - contribution)
     if (building.workRemaining === 0) {
       building.status = 'COMPLETE'
-      crew.forEach((agent) => { agent.stats.built += 1 })
+      crew.forEach((agent) => {
+        agent.buildTargetId = null
+        agent.stats.built += 1
+      })
       addEvent(world, 'BUILD', `${building.name} 건설이 완료되었습니다.`)
       addBuildingStorage(world, building)
       revealNextTier(world)
@@ -363,8 +457,24 @@ export function resolveTick(currentWorld, actions = []) {
   return finishTick(world)
 }
 
-export function stepWorld(currentWorld) {
-  return resolveTick(currentWorld, selectDefaultActions(currentWorld))
+function automaticAction(world, agent) {
+  if (world.launch.status === 'IN_PROGRESS' || agent.nextDecisionTick > world.tick + 1) return null
+  if (agent.gather || agent.process) return { agentId: agent.id, type: 'CONTINUE' }
+  if (agent.buildTargetId) return { agentId: agent.id, type: 'BUILD', buildingId: agent.buildTargetId }
+  return undefined
+}
+
+export function stepWorld(currentWorld, controller = defaultController, recorder) {
+  const automaticActions = currentWorld.agents.map((agent) => automaticAction(currentWorld, agent))
+  const decisionAgentIds = currentWorld.agents
+    .filter((_, index) => automaticActions[index] === undefined)
+    .map((agent) => agent.id)
+  const observations = createObservations(currentWorld, decisionAgentIds)
+  const decisions = observations.length ? controller.decide(observations, { world: currentWorld }) : []
+  const actions = [...automaticActions.filter(Boolean), ...(Array.isArray(decisions) ? decisions : [])]
+  const nextWorld = resolveTick(currentWorld, actions)
+  recorder?.recordTick({ before: currentWorld, after: nextWorld, observations, actions, controllerId: controller.id ?? null })
+  return nextWorld
 }
 
 export function getFrontier(world) {

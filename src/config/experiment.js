@@ -1,10 +1,12 @@
 export const EXPERIMENT_LIMITS = {
-  seed: { min: 0, max: 2147483647 },
+  worldSeed: { min: 0, max: 2147483647 },
+  agentSeed: { min: 0, max: 2147483647 },
   agentCount: { min: 1, max: 5 },
   fovRadius: { min: 1, max: 16 },
 }
 
 const clampInteger = (value, { min, max }) => Math.min(max, Math.max(min, Math.trunc(Number(value) || 0)))
+const booleanOrDefault = (value, fallback) => typeof value === 'boolean' ? value : fallback
 
 const freezeConfig = (config) => {
   Object.values(config).forEach((section) => Object.freeze(section))
@@ -12,7 +14,7 @@ const freezeConfig = (config) => {
 }
 
 export const DEFAULT_EXPERIMENT_CONFIG = freezeConfig({
-  experiment: { seed: 1, agentCount: 5 },
+  experiment: { worldSeed: 1, agentSeed: 1, agentCount: 5 },
   memory: { enabled: true },
   communication: { enabled: true },
   reflection: { enabled: false },
@@ -22,18 +24,34 @@ export const DEFAULT_EXPERIMENT_CONFIG = freezeConfig({
 export function createExperimentConfig(value = {}) {
   return freezeConfig({
     experiment: {
-      seed: clampInteger(value.experiment?.seed ?? DEFAULT_EXPERIMENT_CONFIG.experiment.seed, EXPERIMENT_LIMITS.seed),
+      worldSeed: clampInteger(value.experiment?.worldSeed ?? DEFAULT_EXPERIMENT_CONFIG.experiment.worldSeed, EXPERIMENT_LIMITS.worldSeed),
+      agentSeed: clampInteger(value.experiment?.agentSeed ?? DEFAULT_EXPERIMENT_CONFIG.experiment.agentSeed, EXPERIMENT_LIMITS.agentSeed),
       agentCount: clampInteger(value.experiment?.agentCount ?? DEFAULT_EXPERIMENT_CONFIG.experiment.agentCount, EXPERIMENT_LIMITS.agentCount),
     },
-    memory: { enabled: value.memory?.enabled ?? DEFAULT_EXPERIMENT_CONFIG.memory.enabled },
-    communication: { enabled: value.communication?.enabled ?? DEFAULT_EXPERIMENT_CONFIG.communication.enabled },
-    reflection: { enabled: value.reflection?.enabled ?? DEFAULT_EXPERIMENT_CONFIG.reflection.enabled },
+    memory: { enabled: booleanOrDefault(value.memory?.enabled, DEFAULT_EXPERIMENT_CONFIG.memory.enabled) },
+    communication: { enabled: booleanOrDefault(value.communication?.enabled, DEFAULT_EXPERIMENT_CONFIG.communication.enabled) },
+    reflection: { enabled: booleanOrDefault(value.reflection?.enabled, DEFAULT_EXPERIMENT_CONFIG.reflection.enabled) },
     observation: {
-      partialObservation: value.observation?.partialObservation ?? DEFAULT_EXPERIMENT_CONFIG.observation.partialObservation,
+      partialObservation: booleanOrDefault(value.observation?.partialObservation, DEFAULT_EXPERIMENT_CONFIG.observation.partialObservation),
       fovRadius: clampInteger(value.observation?.fovRadius ?? DEFAULT_EXPERIMENT_CONFIG.observation.fovRadius, EXPERIMENT_LIMITS.fovRadius),
-      storageTimestamp: value.observation?.storageTimestamp ?? DEFAULT_EXPERIMENT_CONFIG.observation.storageTimestamp,
+      storageTimestamp: booleanOrDefault(value.observation?.storageTimestamp, DEFAULT_EXPERIMENT_CONFIG.observation.storageTimestamp),
     },
   })
+}
+
+export function createRunMetadata(runId, config) {
+  return {
+    run_id: runId,
+    world_seed: config.experiment.worldSeed,
+    agent_seed: config.experiment.agentSeed,
+    agent_count: config.experiment.agentCount,
+    memory_enabled: config.memory.enabled,
+    communication_enabled: config.communication.enabled,
+    reflection_enabled: config.reflection.enabled,
+    partial_observation: config.observation.partialObservation,
+    fov_radius: config.observation.fovRadius,
+    storage_timestamp: config.observation.storageTimestamp,
+  }
 }
 
 export function updateExperimentConfig(config, section, field, value) {

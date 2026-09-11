@@ -11,8 +11,6 @@ export const SIMULATION_CONFIG = {
 
 export const ACTION_CONFIG = {
   MOVE: 1,
-  GATHER: 2,
-  MINERAL_GATHER: 4,
   PROCESS: 2,
   BUILD: { 1: 8, 2: 16, 3: 32, 4: 64, 5: 128 },
   TALK: 1,

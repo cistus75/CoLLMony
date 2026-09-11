@@ -1,6 +1,6 @@
 import { RESOURCE_CONFIG, SIMULATION_CONFIG } from '../../config/simulation.js'
 import { cn } from '../../lib/cn.js'
-import { distance } from '../../simulation/engine.js'
+import { distance, footprintCells } from '../../simulation/engine.js'
 
 function MapObject({ position, size = { width: 1, height: 1 }, className, children, ...props }) {
   return (
@@ -16,7 +16,10 @@ function MapObject({ position, size = { width: 1, height: 1 }, className, childr
 
 export function WorldMap({ className, world, displayedPositions, selectedAgentId, observationMode, onSelectAgent }) {
   const selectedPosition = displayedPositions[selectedAgentId]
-  const isVisible = (position) => !observationMode || distance(selectedPosition, position) <= SIMULATION_CONFIG.observationRange
+  const observationConfig = world.run.config.observation
+  const isVisible = (entity) => !observationMode
+    || !observationConfig.partialObservation
+    || footprintCells(entity).some((cell) => distance(selectedPosition, cell) <= observationConfig.fovRadius)
   const buildings = world.buildings.filter((building) => building.status !== 'LOCKED')
 
   return (
@@ -33,7 +36,7 @@ export function WorldMap({ className, world, displayedPositions, selectedAgentId
         <MapObject
           position={world.camp.position}
           size={world.camp.size}
-          className={cn('z-20 grid place-items-center border border-neutral-950 bg-white', !isVisible(world.camp.position) && 'opacity-10')}
+          className={cn('z-20 grid place-items-center border border-neutral-950 bg-white', !isVisible(world.camp) && 'opacity-10')}
         >
           <div className="text-center text-[0.625rem]/3 font-semibold tracking-wide">
             <p>CAMP</p>
@@ -42,7 +45,7 @@ export function WorldMap({ className, world, displayedPositions, selectedAgentId
         </MapObject>
 
         {world.nodes.map((node) => (
-          <MapObject key={node.id} position={node.position} className={cn('z-10 grid place-items-center', !isVisible(node.position) && 'opacity-10')}>
+          <MapObject key={node.id} position={node.position} className={cn('z-10 grid place-items-center', !isVisible(node) && 'opacity-10')}>
             <div className="grid size-[72%] place-items-center rounded-full border border-neutral-500 bg-white text-[0.5625rem]/3 font-semibold text-neutral-700 shadow-[0_1px_2px_rgba(0,0,0,0.08)]">
               {RESOURCE_CONFIG[node.resource].code}
             </div>
@@ -57,7 +60,7 @@ export function WorldMap({ className, world, displayedPositions, selectedAgentId
             className={cn(
               'z-20 grid place-items-center border bg-neutral-50 text-center',
               building.status === 'UNDER_CONSTRUCTION' ? 'border-dashed border-neutral-500' : 'border-neutral-800',
-              !isVisible(building.position) && 'opacity-10',
+              !isVisible(building) && 'opacity-10',
             )}
           >
             <div className="px-1 text-[0.5625rem]/3 font-medium text-neutral-800">
@@ -69,7 +72,7 @@ export function WorldMap({ className, world, displayedPositions, selectedAgentId
 
         {world.agents.map((agent) => {
           const position = displayedPositions[agent.id]
-          const visible = isVisible(position) || agent.id === selectedAgentId
+          const visible = isVisible({ position }) || agent.id === selectedAgentId
           const selected = agent.id === selectedAgentId
           return (
             <button

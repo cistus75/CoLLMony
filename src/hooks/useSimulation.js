@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { DEFAULT_EXPERIMENT_CONFIG, updateExperimentConfig } from '../config/simulation.js'
 import { PLAYBACK_TIMING } from '../config/ui.js'
 import { createWorld, getFrontier, stepWorld } from '../simulation/engine.js'
+import { createEpisodeRecorder } from '../simulation/episodeRecorder.js'
 
 const delay = (duration) => new Promise((resolve) => window.setTimeout(resolve, duration))
 const positionsFrom = (world) => Object.fromEntries(world.agents.map((agent) => [agent.id, agent.position]))
@@ -15,7 +16,7 @@ export function useSimulation() {
   const [selectedAgentId, setSelectedAgentId] = useState(1)
   const [observationMode, setObservationMode] = useState(false)
   const worldRef = useRef(world)
-  const experimentConfigRef = useRef(experimentConfig)
+  const recorderRef = useRef(createEpisodeRecorder(world))
   const speedRef = useRef(speed)
   const animationLock = useRef(false)
   const generation = useRef(0)
@@ -26,7 +27,7 @@ export function useSimulation() {
     if (animationLock.current || worldRef.current.status !== 'RUNNING') return
     animationLock.current = true
     const activeGeneration = generation.current
-    const nextWorld = stepWorld(worldRef.current)
+    const nextWorld = stepWorld(worldRef.current, undefined, recorderRef.current)
     const longestPath = Math.max(0, ...nextWorld.agents.map((agent) => agent.movePath.length))
 
     for (let step = 0; step < longestPath; step += 1) {
@@ -61,6 +62,7 @@ export function useSimulation() {
       personaMode: options.personaMode ?? worldRef.current.personaMode,
     })
     worldRef.current = nextWorld
+    recorderRef.current = createEpisodeRecorder(nextWorld)
     setWorld(nextWorld)
     setDisplayedPositions(positionsFrom(nextWorld))
     setSelectedAgentId(1)
@@ -69,23 +71,18 @@ export function useSimulation() {
   }, [])
 
   const updateExperimentSetting = useCallback((section, field, value) => {
-    setExperimentConfig((current) => {
-      const next = updateExperimentConfig(current, section, field, value)
-      experimentConfigRef.current = next
-      return next
-    })
+    setExperimentConfig((current) => updateExperimentConfig(current, section, field, value))
   }, [])
 
   const startExperiment = useCallback(() => {
-    reset({ experimentConfig: experimentConfigRef.current })
-  }, [reset])
+    reset({ experimentConfig })
+  }, [experimentConfig, reset])
 
   const rerollPersona = useCallback(() => {
-    const next = updateExperimentConfig(experimentConfigRef.current, 'experiment', 'seed', experimentConfigRef.current.experiment.seed + 1)
-    experimentConfigRef.current = next
+    const next = updateExperimentConfig(experimentConfig, 'experiment', 'agentSeed', experimentConfig.experiment.agentSeed + 1)
     setExperimentConfig(next)
     reset({ experimentConfig: next })
-  }, [reset])
+  }, [experimentConfig, reset])
 
   const selectAgent = useCallback((agentId) => {
     setSelectedAgentId(agentId)
@@ -114,6 +111,7 @@ export function useSimulation() {
     observationMode,
     frontier,
     completedBuildings,
+    getEpisodeResult: () => recorderRef.current.result(worldRef.current),
     selectAgent,
     setSpeed,
     setPersonaMode: (personaMode) => reset({ personaMode }),

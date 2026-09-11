@@ -1,22 +1,24 @@
 # CoLLMony domain and system design decisions
 
-CoLLMony is a deterministic research simulation for studying long-horizon cooperation among five locally hosted LLM Agents. The World engine owns state, legality, timing, resource accounting, technology progression, and outcomes. Agents receive partial observations and select high-level actions. This document preserves the agreed domain definitions and MVP rules in one place.
+CoLLMony is a deterministic research simulation for studying long-horizon cooperation among locally hosted LLM Agents. The World engine owns state, legality, timing, resource accounting, technology progression, and outcomes. Agents receive observations and select high-level actions. This document preserves the agreed domain definitions and MVP rules in one place.
 
 ## Domain definitions
 
 **World** is the shared 32×32 simulated environment containing locations, Resource Nodes, buildings, technology, Storage, time, and launch progress.
 
-**Agent** is an individual decision-maker with its own Persona, Partial Observation, Knowledge, Memory, Reflection, carried cargo, needs, and communication history.
+**Agent** is an individual decision-maker with its own Persona, Partial Observation, carried cargo, and needs. Knowledge, Memory, Reflection, and communication history are planned extensions.
 
 **Tick** is one simulated hour. Every Agent makes exactly one decision per Tick. A Simulation Day is 24 Ticks, and an Episode lasts at most 100 Simulation Days, or 2,400 Ticks.
 
-**Episode** is one reproducible World run from its initial seed until successful Launch or the 2,400-Tick limit.
+**Episode** is one reproducible World run from an immutable Run Configuration until successful Launch or the 2,400-Tick limit.
+
+**Run Configuration** is the immutable snapshot of World Seed, Agent Seed, Agent Population, feature switches, and Observation Policy captured when an Episode starts. Each Episode has a unique Run ID.
 
 **Partial Observation** is the Agent-specific projection of the World available at a decision point. It is not the raw global World state.
 
-**Knowledge** is what an Agent has learned from direct observation or Communication. Observed facts, received facts, inferences, beliefs, and actual World state are distinct. Information can be stale or wrong.
+**Knowledge** is a planned record of what an Agent has learned. It will remain distinct from actual World state and may become stale or wrong.
 
-**High-level Action** is an Agent-selected intent such as MOVE, GATHER, PROCESS, BUILD, TALK, WAIT, CONTINUE, ABANDON, or LAUNCH. The deterministic World validates and resolves the intent.
+**High-level Action** is an Agent-selected intent such as MOVE, GATHER, PROCESS, BUILD, DELIVER, WAIT, CONTINUE, ABANDON, or LAUNCH. The deterministic World validates and resolves the intent.
 
 **Persona** is a stable behavioral identity that changes preferences such as risk appetite, exploration tendency, cooperation tendency, time preference, and priorities. Persona does not restrict action space or hard capabilities and remains fixed during an Episode. Explicit professions are not assigned; role differentiation is an observed behavioral outcome.
 
@@ -24,7 +26,7 @@ CoLLMony is a deterministic research simulation for studying long-horizon cooper
 
 **Reflection** is a distinct process that generalizes experience into structured `belief`, `lesson`, or `strategy` guidance. Reflection may change beliefs and strategy, but not Persona or actual World state.
 
-**Communication** is an explicit private message exchanged between Agents. TALK selects one recipient, requires the sender and recipient to be within four cells at resolution, and makes a successful message visible in the recipient's next-Tick observation.
+**Communication** is the planned exchange of explicit private messages between Agents. The current deterministic resolver does not implement TALK or message delivery.
 
 **Resource Node** is a fixed-position, inexhaustible source of a gatherable resource. Every Survival Resource and Raw Resource has at least one Resource Node in the World. Quantity does not deplete; gathering consumes time.
 
@@ -40,17 +42,17 @@ CoLLMony is a deterministic research simulation for studying long-horizon cooper
 
 **Work Position** is one of the four orthogonally adjacent cells from which an Agent performs work on a Resource Node, building, or other target. Agents never stand on target tiles while working.
 
-**Work Commitment** is an ongoing multi-Tick action that continues until completion or explicit abandonment. Leaving the Work Position ends the commitment and records the remaining time as Opportunity Cost.
+**Work Commitment** is an ongoing personal GATHER or PROCESS action that continues until completion or explicit abandonment. BUILD uses repeated per-Tick Construction Crew participation instead.
 
 **Opportunity Cost** is the time and alternative progress lost by committing to, interrupting, or abandoning an action.
 
 **Construction Crew** is the set of Agents simultaneously working on one building, with at most one Agent on each of its four orthogonally adjacent Work Positions.
 
-**Camp** is the shared starting structure. All five Agents start within one cell of Camp, including diagonal cells. Camp is also a permanent Storage location.
+**Camp** is the shared starting structure. Every participating Agent starts within one cell of Camp, including diagonal cells. Camp is also a permanent Storage location.
 
 **Storage** is a resource-holding location such as Camp or a later Warehouse. Each Storage has an independent resource pool. Resources are not automatically shared between Storage locations.
 
-**Carried Cargo** is the resource state held by an Agent while transporting gathered material. An Agent may carry an unlimited quantity of exactly one resource type at a time.
+**Carried Cargo** is the resource state held by an Agent while transporting gathered material. An Agent may carry a configured batch of three units of exactly one resource type at a time.
 
 **Food and Water Needs** are per-Agent daily upkeep requirements of one Food and one Water.
 
@@ -76,7 +78,6 @@ The initial action durations are:
 - ordinary GATHER: two Ticks
 - mineral GATHER: four Ticks
 - PROCESS: two Ticks initially
-- TALK: one Tick
 - WAIT: one Tick
 - LAUNCH: one Tick
 - BUILD: eight Ticks for Tier 1, then 16, 32, 64, and 128 Ticks for Tiers 2–5 before crew reduction
@@ -85,19 +86,23 @@ The exact building roster, recipes, and any PROCESS/BUILD exceptions are configu
 
 Movement is cardinal only; diagonal movement is not allowed. The initial World has no obstacles or line-of-sight system. Movement and spatial action legality are deterministic. Invalid actions are not silently repaired.
 
-For a multi-Tick Work Commitment, the Agent still has a per-Tick decision boundary: it explicitly chooses CONTINUE or ABANDON while the work is in progress. Leaving the Work Position also ends the commitment. Abandoned work yields no partial resource or construction reward.
+Agents do not block one another's movement and may occupy the same grid cell. Static World entities remain blocking.
+
+For a personal Work Commitment, the Agent explicitly chooses CONTINUE or ABANDON while work is in progress. Leaving the Work Position also ends the commitment. Abandoned GATHER or PROCESS work yields no partial resource reward.
+
+BUILD requires a BUILD intent for every participation Tick. Changing intent or leaving the assigned Work Position ends that Agent's participation and records a construction abandonment, while shared building progress remains. Construction Crew membership may therefore change each Tick without a separate personal construction commitment object.
 
 Construction crew reduction is calculated first as `ceil(base_duration / crew_size)`, with a minimum of one Tick. Crew can join or leave during construction; remaining work is resolved from the current crew. Multi-Agent duration reduction applies to BUILD only. GATHER and PROCESS remain individual work.
 
-Conflict outcomes use a seed-based deterministic tie-break rather than permanently privileging a fixed Agent ID. Resource gathering itself has no finite-resource contention because Resource Nodes are inexhaustible.
+Exclusive claims use a World Seed-based deterministic tie-break rather than permanently privileging a fixed Agent ID. Non-conflicting actions retain their normal order. Resource gathering itself has no finite-resource contention because Resource Nodes are inexhaustible.
 
 ## Observation and information boundaries
 
-Observation uses a fixed Manhattan radius of four for every Agent. Within that projection, an Agent can see relevant positions and visible current actions. Other Agents' private Persona, Memory, carried cargo, and private message history are hidden. The Agent receives its observation projection, not raw global World state.
+Partial Observation uses the Run Configuration's Manhattan field radius. Disabling it exposes the full World projection. Within the active projection, an Agent can see relevant positions and visible current actions. Other Agents' private Persona, Memory, carried cargo, and private message history are hidden. The Agent receives its observation projection, not raw global World state.
 
-The full map, global resource quantities, full Tech tree, remote Storage quantities, and other Agents' private state are not initially disclosed. An Agent can learn remote facts by direct observation or Communication, and those facts retain source and time so stale beliefs are possible.
+The full map, global resource quantities, full Tech tree, remote Storage quantities, and other Agents' private state are not initially disclosed. Persistent remote facts and stale Knowledge require the future Knowledge or Communication integration.
 
-The initial common knowledge includes the action schema, basic movement rules, the Agent's own state, and the local observation. After a technology or recipe is completed, the next Tech Frontier is revealed to all Agents, while the complete dependency graph remains hidden.
+The initial common knowledge includes the action schema, basic movement rules, the Agent's own state, and the local observation. After a technology or recipe is completed, the next Tech Frontier's non-spatial knowledge is revealed to all Agents independently of FOV, while its physical details still follow Partial Observation and the complete dependency graph remains hidden.
 
 ## Spatial work and resources
 
@@ -105,13 +110,13 @@ All GATHER, PROCESS, and BUILD actions require the Agent to occupy one of the ta
 
 Each completed GATHER produces exactly one unit after the full Action Duration. There is no partial output. After completion, another GATHER must be explicitly selected; automatic repeat is not used. Multiple Agents may gather simultaneously from the same Resource Node as independent personal Work Commitments.
 
-An Agent can carry unlimited quantity but only one resource type. The Agent must deliver its current Carried Cargo before switching to another resource type. There is no initial discard action.
+An Agent can carry at most three units of one resource type. The Agent must deliver its current Carried Cargo before switching to another resource type. There is no initial discard action.
 
 ## Camp, Warehouse, and logistics
 
 Camp begins as the shared starting Storage and remains available throughout the Episode. Technology progression can unlock additional Warehouses, which are BUILD targets with independent Storage pools and strategically placeable locations. Camp and Warehouses do not automatically share ordinary resources.
 
-Entering one of a Storage's four cardinally adjacent cells triggers automatic Resource Delivery after one Tick. There is no explicit DEPOSIT action. The Agent must remain in the required adjacent position for delivery to complete; leaving cancels the delivery and leaves the cargo with the Agent. The same delivery rule applies to Camp and every Warehouse.
+Resource Delivery is an explicit one-Tick DELIVER action from one of a Storage's four cardinally adjacent Work Positions. Reaching the Work Position alone does not transfer Carried Cargo. There is no separate DEPOSIT action, and the same delivery rule applies to Camp and every Warehouse.
 
 PROCESS consumes all inputs at start from one selected Storage and places its output in that same Storage at completion. BUILD consumes or reserves all required inputs at start from one selected Storage. Carried resources cannot be consumed directly. A single PROCESS or BUILD action cannot combine inputs from multiple Storage pools.
 
@@ -121,7 +126,7 @@ Food and Water upkeep is the exception to independent ordinary Storage pools. On
 
 Each Agent consumes one Food and one Water per Simulation Day. The initial Camp Storage contains 25 Food and 25 Water, covering five days of upkeep for five Agents. Upkeep is processed at the day boundary and does not kill an Agent when unpaid.
 
-If either need is negative, the more negative deficit determines the duration multiplier for every action, including MOVE, GATHER, PROCESS, BUILD, TALK, and WAIT. A deficit of -1 makes an action take twice its base duration, -2 makes it take three times its base duration, -3 makes it take four times its base duration, and so on without an upper limit. The penalty is calculated at action start and remains fixed for that action.
+If either need is negative, the more negative deficit determines the duration multiplier for every implemented action, including MOVE, GATHER, PROCESS, BUILD, DELIVER, and WAIT. A deficit of -1 makes an action take twice its base duration, -2 makes it take three times its base duration, -3 makes it take four times its base duration, and so on without an upper limit. The penalty is calculated at action start and remains fixed for that action.
 
 Food and Water deficits accumulate independently without an upper limit while unpaid. Each need recovers independently by one for each successfully paid daily upkeep. Food and Water are ordinary resources for gathering and cargo purposes: each completed gathering action produces one unit, and single-type Carried Cargo rules apply.
 
@@ -133,17 +138,15 @@ Launchpad and Rocket BUILD use the normal Construction Crew rules and validate a
 
 ## Communication, Memory, and Reflection
 
-TALK is a private free-form message to one explicitly selected Agent within four cells at resolution. A successful message arrives in the recipient's next-Tick observation. The message has a fixed token or character budget, is not automatically verified as truthful, and does not use a global broadcast or shared blackboard. When Communication is disabled for an ablation, TALK is unavailable.
-
-Memory has fixed capacity and deterministic retrieval based on relevance, recency, and importance. Raw research logs remain separate and are not directly searchable by Agents unless information was retained in their Memory. Reflection runs at the end of each Simulation Day and produces searchable `belief`, `lesson`, or `strategy` entries with source event, Tick, confidence, and validity metadata. Reflection does not change Persona or actual World state.
+Communication, Memory, and Reflection currently exist only as recorded experiment settings exposed at the observation boundary. The deterministic controller and resolver do not exchange messages, retrieve episodic Memory, or generate Reflection summaries.
 
 ## Reproducibility and failure handling
 
-The initial population is fixed at five because local inference capacity is a practical constraint. World seed and Agent seed are independent. Deterministic decoding settings, model, backend, prompt, and version metadata are recorded. The deterministic baseline fixes decoding settings and seeds.
+The baseline Agent Population is five because local inference capacity is a practical constraint, and experiments may select between one and five Agents. World Seed and Agent Seed independently control repeatable World and Agent variation. The Run ID, Run Configuration, deterministic decoding settings, model, backend, prompt, and version metadata are recorded.
 
-Malformed JSON, invalid schema output, unknown actions, and timeouts receive at most one retry with the same prompt, model, and decoding seed. If the retry fails, the Tick becomes a logged WAIT/no-op fallback. Normal WAIT, invalid output, retry, and fallback are separate event types. Fallback time counts as idle or efficiency loss.
+The current deterministic controller produces in-process intents and has no model-output retry path. Retry, timeout, and malformed model-output handling belong to the future local-LLM controller adapter.
 
-The raw event log records per-Tick observation hash, raw model output, parsed action, validation result, resolver result, World state diff, Memory/Reflection changes, and model/prompt metadata so episodes can be audited and replayed.
+The Episode Recorder currently records the Run Configuration, decision observations, controller identity, submitted intents, resolved actions, status transitions, and outcome outside React World state. Raw model output, latency, token usage, Memory, Reflection, and message metadata remain future optional fields.
 
 ## Research boundary and evaluation
 
@@ -151,7 +154,7 @@ The primary purpose is a reproducible research platform. Rocket Launch is the st
 
 Role differentiation is measured from Agent-level action distributions, resource contribution, and time allocation rather than Persona labels. Communication usefulness is not asserted by the engine; it is evaluated afterward by relating messages to subsequent information gain, action changes, and task outcomes.
 
-The first end-to-end scenario is a mostly linear chain from Survival and Raw Resources through Processed Resources and Components to the Launchpad and Rocket. The first experiment runs full-system smoke tests, then staged ablations, then a 2⁴ factorial over Persona, Memory, Reflection, and Communication. Development uses one to three seeds. Research comparisons target at least 20 fixed episodes per condition and report success rate, central tendency, and variance. The first Agent population remains five; population size and World variation are later experimental axes.
+The first end-to-end scenario is a mostly linear chain from Survival and Raw Resources through Processed Resources and Components to the Launchpad and Rocket. The first experiment runs full-system smoke tests, then staged ablations, then a 2⁴ factorial over Persona, Memory, Reflection, and Communication. Development uses one to three seeds. Research comparisons target at least 20 fixed episodes per condition and report success rate, central tendency, and variance. The baseline Agent Population remains five while smaller populations can be selected as an experimental condition.
 
 ## Configuration baseline
 
