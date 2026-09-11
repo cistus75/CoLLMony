@@ -476,8 +476,10 @@ export function resolveTick(currentWorld, actions = []) {
     building.workRemaining = Math.max(0, building.workRemaining - contribution)
     if (building.workRemaining === 0) {
       building.status = 'COMPLETE'
-      crew.forEach((agent) => {
+      world.agents.filter((agent) => agent.buildTargetId === buildingId).forEach((agent) => {
         agent.buildTargetId = null
+      })
+      crew.forEach((agent) => {
         agent.stats.built += 1
       })
       addEvent(world, 'BUILD', `${building.name} 건설이 완료되었습니다.`)
